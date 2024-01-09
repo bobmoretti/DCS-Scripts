@@ -64,10 +64,14 @@ local function getDistance3D(point1, point2)
 	return math.sqrt(dX*dX + dZ*dZ + dY*dY)
 end
 
+local function isUnitSAM(unit)
+    return unit:hasAttribute("SAM TR") and not unit:hasAttribute("AAA")
+end
+
 local function rangeOfSAM(gp)
   local maxRange = 0
   for _, unit in pairs(gp:getUnits()) do
-    if unit:hasAttribute("SAM TR") and SAMRangeLookupTable[unit:getTypeName()] then
+    if isUnitSAM(unit) and SAMRangeLookupTable[unit:getTypeName()] then
       local samRange  = SAMRangeLookupTable[unit:getTypeName()]
       if maxRange < samRange then
         maxRange = samRange
@@ -319,17 +323,16 @@ local function checkGroupRole(gp)
   local numTrackRadars = 0
   local numEWRRadars = 0
   if gp:getCategory() == 2 then
-      for _, unt in pairs(gp:getUnits()) do
-        if unt:hasAttribute("EWR") then
-        isEWR = true
+    for _, unt in pairs(gp:getUnits()) do
+      isEWR = unt:hasAttribute("EWR")
+      isSAM = isUnitSAM(unt)
+      hasDL = unt:hasAttribute("Datalink")
+      if isEWR then
         numEWRRadars = numEWRRadars + 1
-      elseif unt:hasAttribute("SAM TR") then
-        isSAM = true
+      elseif isSAM then
+        env.info(string.format("Detected %s in group %s as a SAM", unt:getTypeName(), gp:getName()))
         samType = unt:getTypeName()
         numSAMRadars = numSAMRadars + 1
-      end
-      if unt:hasAttribute("Datalink") then
-        hasDL = true
       end
     end
     if isEWR then
@@ -345,6 +348,7 @@ local function checkGroupRole(gp)
       }
       return gp:getName()
     elseif isSAM and rangeOfSAM(gp) then
+      env.info(string.format("Adding SAM %s with %d radars", gp:getName(), numSAMRadars))
       SAMSites[gp:getName()] = {
           ["Name"] = gp:getName(),
           ["SAMGroup"] = gp,
@@ -392,7 +396,7 @@ local function onDeath(event)
     local eventGroup = event.initiator:getGroup()
     for _, SAM in pairs(SAMSites) do
       if eventGroup:getName() == SAM.Name then
-        if eventUnit:hasAttribute("SAM TR") then
+        if isUnitSAM(eventUnit) then
           SAM.numSAMRadars = SAM.numSAMRadars - 1
         end
         if SAM.numSAMRadars < 1 then
